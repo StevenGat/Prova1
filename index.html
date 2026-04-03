@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>💊 Farmaci Prezzi</title>
+<style>
+  :root {
+    --blue:#2563EB; --green:#16A34A; --red:#DC2626;
+    --bg:#F5F7FA; --card:#fff; --text:#1E293B; --sub:#64748B;
+    --border:#E2E8F0; --best:#ECFDF5; --bestb:#16A34A;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+       background:var(--bg);color:var(--text)}
+  header{background:var(--blue);color:#fff;padding:16px 20px;
+         display:flex;justify-content:space-between;align-items:center;
+         position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+  header h1{font-size:18px;font-weight:700}
+  header small{font-size:11px;opacity:.75;display:block;margin-top:2px}
+  .badge{background:rgba(255,255,255,.2);border-radius:20px;
+         padding:4px 10px;font-size:12px;cursor:pointer}
+  main{padding:16px;max-width:700px;margin:0 auto}
+  .btn{display:block;width:100%;background:var(--blue);color:#fff;
+       border:none;border-radius:10px;padding:13px;font-size:15px;
+       font-weight:600;cursor:pointer;text-align:center;margin-bottom:8px}
+  .btn:active{opacity:.85}
+  .btn-outline{background:transparent;border:2px solid var(--blue);color:var(--blue)}
+  .btn-green{background:var(--green)}
+  .card{background:var(--card);border-radius:12px;padding:14px 16px;
+        margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,.07);cursor:pointer}
+  .card:active{opacity:.85}
+  .card h3{font-size:15px;font-weight:600}
+  .card small{color:var(--sub);font-size:13px;margin-top:3px;display:block}
+  .card .arrow{float:right;color:var(--sub);font-size:20px;line-height:1.2}
+  .best{border:2px solid var(--bestb);background:var(--best)}
+  .best-badge{color:var(--green);font-size:12px;font-weight:700;margin-bottom:6px}
+  .row{display:flex;justify-content:space-between;align-items:center;margin-top:5px}
+  .price{font-size:16px;font-weight:700;color:var(--blue)}
+  .price-big{font-size:18px;font-weight:800;color:var(--green)}
+  .sub{color:var(--sub);font-size:13px}
+  .section-title{font-size:13px;font-weight:600;color:var(--sub);
+                  text-transform:uppercase;letter-spacing:.5px;
+                  margin:16px 0 8px}
+  .back{background:none;border:none;color:var(--blue);font-size:15px;
+        font-weight:600;cursor:pointer;padding:8px 0;margin-bottom:8px}
+  .farmaco-header{background:var(--blue);color:#fff;border-radius:12px;
+                   padding:14px 16px;margin-bottom:12px}
+  .farmaco-header h2{font-size:16px;font-weight:700}
+  .farmaco-header small{opacity:.8;font-size:13px}
+  .rank{font-size:20px;font-weight:800;color:var(--sub);
+        min-width:32px;text-align:center}
+  .error{background:#FEF2F2;border:1px solid #FCA5A5;border-radius:10px;
+          padding:14px;color:var(--red);font-size:14px;line-height:1.6}
+  .spinner{text-align:center;padding:40px;color:var(--sub);font-size:15px}
+  .empty{text-align:center;padding:40px;color:var(--sub)}
+  #modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+          z-index:200;justify-content:flex-end;flex-direction:column}
+  #modal.open{display:flex}
+  .modal-card{background:#fff;border-radius:20px 20px 0 0;padding:24px;
+               max-height:80vh;overflow-y:auto}
+  .modal-card h3{font-size:17px;font-weight:700;margin-bottom:12px}
+  .detail-row{padding:10px 0;border-bottom:1px solid var(--border)}
+  .detail-row:last-child{border-bottom:none}
+  .detail-row h4{font-size:14px;font-weight:600}
+  .detail-row small{color:var(--sub);font-size:13px}
+  .divider{height:1px;background:var(--border);margin:8px 0}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>💊 Farmaci Prezzi</h1>
+    <small id="hdr-sub">Confronto prezzi da Trovaprezzi.it</small>
+  </div>
+  <span class="badge" onclick="aggiorna()">🔄 Aggiorna</span>
+</header>
+
+<main id="main"></main>
+
+<!-- Modal dettaglio farmacia -->
+<div id="modal" onclick="chiudiModal(event)">
+  <div class="modal-card" id="modal-content"></div>
+</div>
+
+<script>
+const API = '';  // stesso dominio, path relativo
+let farmaci = [];
+let schermata = 'home';
+
+async function fetchJson(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+function spinner(msg) {
+  document.getElementById('main').innerHTML =
+    `<div class="spinner">⏳ ${msg || 'Caricamento...'}</div>`;
+}
+
+function errore(msg) {
+  document.getElementById('main').innerHTML =
+    `<div class="error">❌ ${msg}</div>`;
+}
+
+// ── HOME ────────────────────────────────────────────────────────────────────
+async function mostraHome() {
+  schermata = 'home';
+  document.getElementById('hdr-sub').textContent = 'Confronto prezzi da Trovaprezzi.it';
+  spinner('Carico lista farmaci...');
+  try {
+    farmaci = await fetchJson('/api/farmaci');
+    let html = `<button class="btn btn-green" onclick="mostraConfronto()">
+                  🏆 Confronto totale farmacie
+                </button>
+                <p class="section-title">Seleziona un farmaco:</p>`;
+    farmaci.forEach(f => {
+      html += `<div class="card" onclick="mostraPrezzi('${f.id}')">
+        <span class="arrow">›</span>
+        <h3>${f.nome}</h3>
+        <small>Quantità: ${f.qty} pz</small>
+      </div>`;
+    });
+    document.getElementById('main').innerHTML = html;
+  } catch(e) {
+    errore('Impossibile caricare i farmaci.<br>' + e.message);
+  }
+}
+
+// ── PREZZI FARMACO ───────────────────────────────────────────────────────────
+async function mostraPrezzi(id) {
+  schermata = 'prezzi';
+  const f = farmaci.find(x => x.id === id);
+  document.getElementById('hdr-sub').textContent = f ? f.nome : '';
+  spinner('Scarico prezzi da Trovaprezzi...');
+  try {
+    const data = await fetchJson('/api/prezzi/' + id);
+    let html = `<button class="back" onclick="mostraHome()">‹ Indietro</button>
+      <div class="farmaco-header">
+        <h2>${data.farmaco}</h2>
+        <small>Quantità cercata: ${data.qty} pz</small>
+      </div>
+      <p class="section-title">${data.offerte.length} offerte trovate</p>`;
+
+    data.offerte.forEach((o, i) => {
+      const best = i === 0;
+      const totQty = (o.totale * data.qty).toFixed(2);
+      html += `<div class="card ${best ? 'best' : ''}">
+        ${best ? '<div class="best-badge">⭐ MIGLIOR PREZZO</div>' : ''}
+        <div class="row">
+          <strong>${o.shop}</strong>
+          <span class="price">${o.prezzo.toFixed(2)} €</span>
+        </div>
+        <div class="row">
+          <span class="sub">Spediz.: ${o.sped > 0 ? o.sped.toFixed(2)+'€' : 'Gratuita'}</span>
+          <span class="sub">Tot.: ${o.totale.toFixed(2)} €</span>
+        </div>
+        <div class="row" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+          <span class="sub">× ${data.qty} pz =</span>
+          <span class="${best ? 'price-big' : 'price'}">${totQty} €</span>
+        </div>
+      </div>`;
+    });
+
+    if (!data.offerte.length)
+      html += '<p class="empty">Nessuna offerta trovata</p>';
+    document.getElementById('main').innerHTML = html;
+  } catch(e) {
+    errore('Errore download prezzi: ' + e.message);
+  }
+}
+
+// ── CONFRONTO FARMACIE ───────────────────────────────────────────────────────
+async function mostraConfronto() {
+  schermata = 'confronto';
+  document.getElementById('hdr-sub').textContent = 'Classifica farmacie';
+  spinner('Scarico tutti i prezzi... (può richiedere 1-2 minuti)');
+  try {
+    const data = await fetchJson('/api/confronto');
+    let html = `<button class="back" onclick="mostraHome()">‹ Indietro</button>
+      <p class="section-title">🏆 Classifica per spesa totale</p>`;
+
+    data.forEach((d, i) => {
+      const best = i === 0;
+      html += `<div class="card ${best ? 'best' : ''}"
+                    onclick="apriDettaglio(${i})" data-idx="${i}">
+        <div class="row">
+          <span class="rank">#${i+1}</span>
+          <strong style="flex:1;margin:0 10px">${d.shop}</strong>
+          <span class="${best ? 'price-big' : 'price'}">${d.totale.toFixed(2)} €</span>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <span class="sub">Farmaci trovati: ${d.trovati}/${farmaci.length}</span>
+          <span class="sub">Dettaglio ›</span>
+        </div>
+      </div>`;
+    });
+
+    if (!data.length) html += '<p class="empty">Nessun dato</p>';
+    document.getElementById('main').innerHTML = html;
+    window._confrontoData = data;
+  } catch(e) {
+    errore('Errore confronto: ' + e.message);
+  }
+}
+
+function apriDettaglio(idx) {
+  const d = window._confrontoData[idx];
+  let html = `<h3>${d.shop}</h3>
+    <p class="sub" style="margin-bottom:12px">Totale: <strong>${d.totale.toFixed(2)} €</strong></p>`;
+  d.dettaglio.forEach(r => {
+    html += `<div class="detail-row">
+      <h4>${r.farmaco}</h4>
+      <small>${r.prezzo.toFixed(2)}€ + ${r.sped.toFixed(2)}€ sped. × ${r.qty} pz
+             = <strong>${r.totale_qty.toFixed(2)} €</strong></small>
+    </div>`;
+  });
+  html += `<button class="btn" style="margin-top:16px" onclick="chiudiModal()">Chiudi</button>`;
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal').classList.add('open');
+}
+
+function chiudiModal(e) {
+  if (!e || e.target === document.getElementById('modal'))
+    document.getElementById('modal').classList.remove('open');
+}
+
+function aggiorna() {
+  if (schermata === 'home') mostraHome();
+  else if (schermata === 'confronto') mostraConfronto();
+}
+
+mostraHome();
+</script>
+</body>
+</html>
