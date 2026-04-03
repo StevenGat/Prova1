@@ -14,6 +14,7 @@ header small{font-size:11px;opacity:.75}
 main{padding:16px;max-width:700px;margin:0 auto}
 .btn{display:block;width:100%;background:var(--blue);color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px}
 .btn-green{background:var(--green)}
+.btn-sm{padding:8px 14px;font-size:13px;border-radius:8px;display:inline-block;width:auto;margin:4px}
 .card{background:var(--card);border-radius:12px;padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,.07);cursor:pointer}
 .card h3{font-size:15px;font-weight:600}
 .card small{color:var(--sub);font-size:13px;margin-top:3px;display:block}
@@ -26,75 +27,171 @@ main{padding:16px;max-width:700px;margin:0 auto}
 .back{background:none;border:none;color:var(--blue);font-size:15px;font-weight:600;cursor:pointer;padding:8px 0;margin-bottom:8px}
 .fhdr{background:var(--blue);color:#fff;border-radius:12px;padding:14px;margin-bottom:12px}
 .rank{font-size:20px;font-weight:800;color:var(--sub);min-width:32px}
-.spinner{text-align:center;padding:40px;color:var(--sub)}
-.error{background:#FEF2F2;border:1px solid #FCA5A5;border-radius:10px;padding:14px;color:#DC2626;font-size:14px;line-height:1.6}
+.spinner{text-align:center;padding:40px;color:var(--sub);font-size:15px}
+.error{background:#FEF2F2;border:1px solid #FCA5A5;border-radius:10px;padding:14px;color:#DC2626;font-size:14px;line-height:1.8}
 .sec{font-size:12px;font-weight:600;color:var(--sub);text-transform:uppercase;margin:14px 0 8px}
 #modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end}
 #modal.open{display:flex}
 .mc{background:#fff;border-radius:20px 20px 0 0;padding:24px;max-height:80vh;overflow-y:auto;width:100%}
 .dr{padding:10px 0;border-bottom:1px solid var(--border)}
+#logbox{background:#1E293B;color:#94A3B8;font-family:monospace;font-size:11px;
+        padding:12px;border-radius:10px;margin-top:12px;max-height:180px;overflow-y:auto;line-height:1.8}
+#logbox .ok{color:#4ADE80}
+#logbox .ko{color:#F87171}
+#logbox .info{color:#60A5FA}
 </style>
 </head>
 <body>
-<header><h1>&#128138; Farmaci Prezzi</h1><small>Confronto Trovaprezzi.it</small></header>
-<main id="main"></main>
+<header><h1>&#128138; Farmaci Prezzi</h1><small id="hsub">Confronto Trovaprezzi.it</small></header>
+<main id="main">
+  <div class="spinner">&#9200; Avvio in corso...</div>
+  <div id="logbox"></div>
+</main>
+
 <div id="modal" onclick="if(event.target===this)chiudiModal()">
   <div class="mc" id="mc"></div>
 </div>
+
 <script>
 let farmaci=[],confrontoData=[];
-async function api(p){const r=await fetch(p);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}
-function spin(m){document.getElementById('main').innerHTML='<div class="spinner">&#9200; '+(m||'Caricamento...')+'</div>';}
-function err(m){document.getElementById('main').innerHTML='<div class="error">&#10060; '+m+'</div>';}
+
+/* ── LOG PANEL ── */
+function log(msg, tipo){
+  const box=document.getElementById('logbox');
+  if(!box) return;
+  const ts=new Date().toLocaleTimeString('it-IT');
+  box.innerHTML+='<div class="'+(tipo||'info')+'">['+ts+'] '+msg+'</div>';
+  box.scrollTop=box.scrollHeight;
+}
+
+/* ── API helper ── */
+async function api(path){
+  log('Fetch: '+path);
+  const r=await fetch(path);
+  log('Risposta HTTP: '+r.status+' '+r.statusText, r.ok?'ok':'ko');
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const data=await r.json();
+  log('JSON ricevuto: '+JSON.stringify(data).substring(0,80)+'...','ok');
+  return data;
+}
+
+function spin(m){
+  document.getElementById('main').innerHTML=
+    '<div class="spinner">&#9200; '+m+'</div><div id="logbox"></div>';
+}
+function err(m){
+  document.getElementById('main').innerHTML=
+    '<div class="error">&#10060; '+m+
+    '<br><br><button class="btn" onclick="home()" style="margin-top:8px">&#8635; Riprova</button></div>'+
+    '<div id="logbox"></div>';
+}
+
+/* ── HOME ── */
 async function home(){
   spin('Carico lista farmaci...');
+  log('Avvio home()','info');
   try{
     farmaci=await api('/api/farmaci');
-    let h='<button class="btn btn-green" onclick="confronto()">&#127942; Confronto totale farmacie</button><p class="sec">Seleziona un farmaco:</p>';
-    farmaci.forEach(f=>{h+='<div class="card" onclick="prezzi(''+f.id+'')"><h3>'+f.nome+'</h3><small>Qty: '+f.qty+' pz</small></div>';});
+    log('Farmaci caricati: '+farmaci.length,'ok');
+    let h='<button class="btn btn-green" onclick="confronto()">&#127942; Confronto totale farmacie</button>'+
+          '<p class="sec">Seleziona un farmaco:</p>';
+    farmaci.forEach(f=>{
+      h+='<div class="card" onclick="prezzi(''+f.id+'')">'+
+         '<h3>'+f.nome+'</h3><small>Qty: '+f.qty+' pz &nbsp;&#8250;</small></div>';
+    });
+    // Mantieni logbox in fondo
+    h+='<p class="sec" style="cursor:pointer" onclick="toggleLog()">&#128196; Log diagnostico</p>'+
+       '<div id="logbox" style="display:none"></div>';
     document.getElementById('main').innerHTML=h;
-  }catch(e){err('Server non raggiungibile.<br>'+e.message);}
+    // Ri-popola log dopo innerHTML
+    const box=document.getElementById('logbox');
+    if(box) box.innerHTML='<div class="ok">[OK] App caricata correttamente</div>';
+  }catch(e){
+    log('ERRORE: '+e.message,'ko');
+    err('Impossibile caricare i farmaci.<br><code>'+e.message+'</code><br><br>'+
+        'Controlla i Logs su Render Dashboard');
+  }
 }
+
+function toggleLog(){
+  const b=document.getElementById('logbox');
+  if(b) b.style.display=b.style.display==='none'?'block':'none';
+}
+
+/* ── PREZZI ── */
 async function prezzi(id){
-  spin('Scarico prezzi...');
+  spin('Scarico prezzi da Trovaprezzi...');
+  log('Fetch prezzi farmaco id='+id);
   try{
     const d=await api('/api/prezzi/'+id);
-    let h='<button class="back" onclick="home()">&#8249; Indietro</button><div class="fhdr"><strong>'+d.farmaco+'</strong><br><small>Qty: '+d.qty+' pz</small></div><p class="sec">'+d.offerte.length+' offerte trovate</p>';
+    log('Offerte ricevute: '+d.offerte.length,'ok');
+    let h='<button class="back" onclick="home()">&#8249; Indietro</button>'+
+          '<div class="fhdr"><strong>'+d.farmaco+'</strong><br><small>Qty: '+d.qty+' pz</small></div>'+
+          '<p class="sec">'+d.offerte.length+' offerte trovate</p>';
     d.offerte.forEach((o,i)=>{
-      const best=i===0,tq=(o.totale*d.qty).toFixed(2);
+      const best=i===0, tq=(o.totale*d.qty).toFixed(2);
       h+='<div class="card'+(best?' best':'')+'">'+
          (best?'<div class="best-badge">&#11088; MIGLIOR PREZZO</div>':'')+
-         '<div class="row"><strong>'+o.shop+'</strong><span class="price">'+o.prezzo.toFixed(2)+' &#8364;</span></div>'+
-         '<div class="row"><span class="sub">Sped.: '+(o.sped>0?o.sped.toFixed(2)+'&#8364;':'Gratuita')+'</span><span class="sub">Tot.: '+o.totale.toFixed(2)+'&#8364;</span></div>'+
-         '<div class="row" style="margin-top:8px;padding-top:8px;border-top:1px solid #E2E8F0"><span class="sub">x'+d.qty+' pz =</span><span class="'+(best?'price-big':'price')+'">'+tq+' &#8364;</span></div></div>';
+         '<div class="row"><strong>'+o.shop+'</strong>'+
+         '<span class="price">'+o.prezzo.toFixed(2)+' &#8364;</span></div>'+
+         '<div class="row">'+
+         '<span class="sub">Sped.: '+(o.sped>0?o.sped.toFixed(2)+'&#8364;':'Gratuita')+'</span>'+
+         '<span class="sub">Tot.: '+o.totale.toFixed(2)+'&#8364;</span></div>'+
+         '<div class="row" style="margin-top:8px;padding-top:8px;border-top:1px solid #E2E8F0">'+
+         '<span class="sub">x'+d.qty+' pz =</span>'+
+         '<span class="'+(best?'price-big':'price')+'">'+tq+' &#8364;</span></div></div>';
     });
+    if(!d.offerte.length)
+      h+='<p style="text-align:center;color:var(--sub);padding:30px">Nessuna offerta trovata</p>';
     document.getElementById('main').innerHTML=h;
-  }catch(e){err('Errore: '+e.message);}
+  }catch(e){
+    err('Errore download prezzi:<br><code>'+e.message+'</code>');
+  }
 }
+
+/* ── CONFRONTO ── */
 async function confronto(){
-  spin('Scarico tutti i prezzi... (1-2 minuti)');
+  spin('Scarico tutti i prezzi... (1-2 min)');
+  log('Avvio confronto totale');
   try{
     const data=await api('/api/confronto');
     confrontoData=data;
-    let h='<button class="back" onclick="home()">&#8249; Indietro</button><p class="sec">&#127942; Classifica farmacie</p>';
+    log('Farmacie ricevute: '+data.length,'ok');
+    let h='<button class="back" onclick="home()">&#8249; Indietro</button>'+
+          '<p class="sec">&#127942; Classifica farmacie</p>';
     data.forEach((d,i)=>{
       const best=i===0;
-      h+='<div class="card'+(best?' best':'')+ '" onclick="dettaglio('+i+')">'
-        +'<div class="row"><span class="rank">#'+(i+1)+'</span><strong style="flex:1;margin:0 10px">'+d.shop+'</strong><span class="'+(best?'price-big':'price')+'">'+d.totale.toFixed(2)+' &#8364;</span></div>'
-        +'<div class="row"><span class="sub">Trovati: '+d.trovati+'/'+farmaci.length+'</span><span class="sub">Dettaglio &#8250;</span></div></div>';
+      h+='<div class="card'+(best?' best':'')+ '" onclick="dettaglio('+i+')">'+
+         '<div class="row"><span class="rank">#'+(i+1)+'</span>'+
+         '<strong style="flex:1;margin:0 10px">'+d.shop+'</strong>'+
+         '<span class="'+(best?'price-big':'price')+'">'+d.totale.toFixed(2)+' &#8364;</span></div>'+
+         '<div class="row"><span class="sub">Trovati: '+d.trovati+'/'+farmaci.length+'</span>'+
+         '<span class="sub">Dettaglio &#8250;</span></div></div>';
     });
     document.getElementById('main').innerHTML=h;
-  }catch(e){err('Errore: '+e.message);}
+  }catch(e){
+    err('Errore confronto:<br><code>'+e.message+'</code>');
+  }
 }
+
+/* ── DETTAGLIO ── */
 function dettaglio(i){
   const d=confrontoData[i];
-  let h='<h3 style="font-size:17px;margin-bottom:8px">'+d.shop+'</h3><p style="color:var(--sub);margin-bottom:14px">Totale: <strong>'+d.totale.toFixed(2)+' &#8364;</strong></p>';
-  d.dettaglio.forEach(r=>{h+='<div class="dr"><strong style="font-size:14px">'+r.farmaco+'</strong><br><small style="color:var(--sub)">'+r.prezzo.toFixed(2)+'&#8364; + '+r.sped.toFixed(2)+'&#8364; sped. x'+r.qty+' = <strong>'+r.totale_qty.toFixed(2)+' &#8364;</strong></small></div>';});
+  let h='<h3 style="font-size:17px;margin-bottom:8px">'+d.shop+'</h3>'+
+        '<p style="color:var(--sub);margin-bottom:14px">Totale: <strong>'+d.totale.toFixed(2)+' &#8364;</strong></p>';
+  d.dettaglio.forEach(r=>{
+    h+='<div class="dr"><strong style="font-size:14px">'+r.farmaco+'</strong><br>'+
+       '<small style="color:var(--sub)">'+r.prezzo.toFixed(2)+'&#8364; + '+r.sped.toFixed(2)+
+       '&#8364; sped. x'+r.qty+' = <strong>'+r.totale_qty.toFixed(2)+' &#8364;</strong></small></div>';
+  });
   h+='<button class="btn" style="margin-top:16px" onclick="chiudiModal()">Chiudi</button>';
   document.getElementById('mc').innerHTML=h;
   document.getElementById('modal').classList.add('open');
 }
 function chiudiModal(){document.getElementById('modal').classList.remove('open');}
+
+/* ── START ── */
+log('Pagina caricata, avvio home()','info');
 home();
 </script>
 </body>
